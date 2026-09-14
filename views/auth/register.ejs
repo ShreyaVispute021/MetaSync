@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create Account | MetaSync</title>
+</head>
+<body>
+  <h1>Create MetaSync Account</h1>
+
+  <% if (error) { %>
+    <p style="color: red;"><%= error %></p>
+  <% } %>
+
+  <form action="/auth/register" method="POST">
+    <input type="text" name="name" placeholder="Full name" required>
+    <br><br>
+    <input type="email" name="email" placeholder="Email address" required>
+    <br><br>
+    <input type="password" name="password" placeholder="Password" minlength="6" required>
+    <br><br>
+    <button type="submit">Create account</button>
+  </form>
+
+  <p>Already registered? <a href="/auth/login">Log in</a></p>
+</body>
+</html>
