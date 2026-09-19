@@ -33,7 +33,7 @@ router.post(
 
 router.post("/:id/share",requireLogin,fileController.shareFile);
 router.post(
-  "/:/id/permissions/:permissionId/revoke",
+  "/:id/permissions/:permissionId/revoke",
   requireLogin,
   fileController.revokePermission
 );
