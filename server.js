@@ -4,7 +4,7 @@ const express = require("express");
 const path = require("path");
 const mongoose = require("mongoose");
 const session = require("express-session");
-const MongoStore = require("connect-mongo");
+const { MongoStore } = require("connect-mongo");
 const methodOverride = require("method-override");
 const helmet = require("helmet");
 const morgan = require("morgan");
@@ -43,8 +43,12 @@ app.use(
 );
 
 app.use("/auth", require("./routes/authRoutes"));
-
+app.use("/files", require("./routes/fileRoutes"));
 app.get("/", (req, res) => {
+  if (req.session.userId) {
+    return res.redirect("/files/dashboard");
+  }
+
   res.render("index");
 });
 

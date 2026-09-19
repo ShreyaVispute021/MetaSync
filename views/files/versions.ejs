@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Version History | MetaSync</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-dark text-light">
+  <nav class="navbar navbar-dark bg-black border-bottom border-secondary px-4">
+    <a class="navbar-brand fw-bold" href="/files/dashboard">← MetaSync Dashboard</a>
+  </nav>
+
+  <main class="container py-5">
+    <h1 class="fw-bold mb-2">Version History</h1>
+    <p class="text-secondary">
+      <strong class="text-light"><%= file.name %></strong>
+      · Current metadata revision: <%= file.revision %>
+    </p>
+
+    <% if (message) { %>
+      <div class="alert alert-success"><%= message %></div>
+    <% } %>
+
+    <% if (error) { %>
+      <div class="alert alert-danger"><%= error %></div>
+    <% } %>
+
+    <div class="card bg-black border-secondary text-light mb-4">
+      <div class="card-body p-4">
+        <h4>Upload New Version</h4>
+
+        <form action="/files/<%= file._id %>/versions" method="POST" enctype="multipart/form-data">
+          <input type="hidden" name="expectedRevision" value="<%= file.revision %>">
+
+          <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label">Replacement File</label>
+              <input class="form-control" type="file" name="file" required>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Target Storage Node</label>
+              <select class="form-select" name="nodeId" required>
+                <% nodes.forEach(node => { %>
+                  <option value="<%= node._id %>"><%= node.nodeName %></option>
+                <% }) %>
+              </select>
+            </div>
+
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100">Create Next Version</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card bg-black border-secondary text-light">
+      <div class="card-body p-4">
+        <h4 class="mb-3">All Immutable Version Records</h4>
+
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Size</th>
+                <th>Checksum</th>
+                <th>Created</th>
+                <th>State</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% versions.forEach(version => { %>
+                <tr>
+                  <td>V<%= version.versionNo %></td>
+                  <td><%= (version.size / 1024).toFixed(2) %> KB</td>
+                  <td><code class="text-info"><%= version.checksum.slice(0, 16) %>...</code></td>
+                  <td><%= version.createdAt.toLocaleString() %></td>
+                  <td>
+                    <% if (String(file.currentVersionId) === String(version._id)) { %>
+                      <span class="badge text-bg-success">CURRENT</span>
+                    <% } else if (version.isRestoredVersion) { %>
+                      <span class="badge text-bg-info">RESTORED</span>
+                    <% } else { %>
+                      <span class="badge text-bg-secondary">HISTORICAL</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (String(file.currentVersionId) !== String(version._id)) { %>
+                      <form action="/files/<%= file._id %>/restore/<%= version._id %>" method="POST">
+                        <input type="hidden" name="expectedRevision" value="<%= file.revision %>">
+                        <button class="btn btn-sm btn-warning">Restore as New Version</button>
+                      </form>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
