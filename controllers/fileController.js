@@ -51,19 +51,68 @@ async function ensureStorageNodes() {
   }
 }
 
+
 exports.dashboard = async (req, res) => {
   try {
     await ensureStorageNodes();
 
-    const [files, nodes] = await Promise.all([
-      File.find({
+    const q = String(req.query.q || "").trim().slice(0, 100);
+    const ext = String(req.query.ext || "")
+      .replace(/^\./, "")
+      .trim()
+      .slice(0, 10);
+    const allowedSorts = ["newest", "oldest", "nameAsc", "nameDesc"];
+    const sort = allowedSorts.includes(req.query.sort)
+      ? req.query.sort
+      : "newest";
+
+    const requestedPage = Number.parseInt(req.query.page, 10);
+    const page = Number.isInteger(requestedPage) && requestedPage > 0
+      ? requestedPage
+      : 1;
+    const limit = 10;
+
+    const conditions = [
+      {
         ownerId: req.session.userId,
         status: "ACTIVE",
-      })
+      },
+    ];
+
+    if (q) {
+      const safeSearch = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      conditions.push({
+        name: { $regex: safeSearch, $options: "i" },
+      });
+    }
+
+    if (ext && /^[a-zA-Z0-9]+$/.test(ext)) {
+      const safeExt = ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      conditions.push({
+        name: { $regex: `\\.${safeExt}$`, $options: "i" },
+      });
+    }
+
+    const filter = { $and: conditions };
+
+    const sortOptions = {
+      newest: { updatedAt: -1 },
+      oldest: { updatedAt: 1 },
+      nameAsc: { name: 1 },
+      nameDesc: { name: -1 },
+    };
+
+    const [files, nodes, totalFiles] = await Promise.all([
+      File.find(filter)
         .populate("currentVersionId")
-        .sort({ updatedAt: -1 }),
+        .sort(sortOptions[sort])
+        .skip((page - 1) * limit)
+        .limit(limit),
       StorageNode.find().sort({ nodeName: 1 }),
+      File.countDocuments(filter),
     ]);
+
+    const totalPages = Math.max(1, Math.ceil(totalFiles / limit));
 
     res.render("files/dashboard", {
       files,
@@ -71,11 +120,18 @@ exports.dashboard = async (req, res) => {
       userName: req.session.userName,
       message: req.query.message || null,
       error: req.query.error || null,
+      q,
+      ext,
+      sort,
+      page: Math.min(page, totalPages),
+      totalPages,
+      totalFiles,
     });
   } catch (error) {
     res.status(500).send(error.message);
   }
 };
+
 
 exports.uploadFile = async (req, res) => {
   let operation = null;
@@ -559,5 +615,369 @@ exports.revokePermission = async (req, res) => {
     res.redirect(`/files/${file._id}/versions?message=Permission revoked.`);
   } catch (error) {
     res.redirect(`/files/${req.params.id}/versions?error=Could not revoke permission.`);
+  }
+};
+
+
+exports.deleteFile = async (req, res) => {
+  try {
+    const file = await File.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        ownerId: req.session.userId,
+        status: "ACTIVE",
+      },
+      {
+        $set: { status: "DELETED" },
+        $inc: { revision: 1 },
+      },
+      { new: true }
+    );
+
+    if (!file) {
+      return res.status(404).send("File not found or access denied.");
+    }
+
+    await AuditLog.create({
+      actorId: req.session.userId,
+      action: "FILE_DELETED",
+      fileId: file._id,
+      details: {
+        deletionType: "SOFT_DELETE",
+        fileName: file.name,
+      },
+    });
+
+    res.redirect("/files/dashboard?message=File moved to recycle bin.");
+  } catch (error) {
+    console.error("Soft delete failed:", error);
+    res.status(500).send("Could not delete the file.");
+  }
+};
+
+exports.recycleBin = async (req, res) => {
+  try {
+    const files = await File.find({
+      ownerId: req.session.userId,
+      status: "DELETED",
+    })
+      .populate("currentVersionId")
+      .sort({ updatedAt: -1 });
+
+    res.render("files/recycle-bin", {
+      files,
+      userName: req.session.userName,
+      message: req.query.message || null,
+      error: req.query.error || null,
+    });
+  } catch (error) {
+    console.error("Recycle bin failed:", error);
+    res.status(500).send("Could not load the recycle bin.");
+  }
+};
+
+exports.recoverFile = async (req, res) => {
+  try {
+    const file = await File.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        ownerId: req.session.userId,
+        status: "DELETED",
+      },
+      {
+        $set: { status: "ACTIVE" },
+        $inc: { revision: 1 },
+      },
+      { new: true }
+    );
+
+    if (!file) {
+      return res.status(404).send("Deleted file not found or access denied.");
+    }
+
+    await AuditLog.create({
+      actorId: req.session.userId,
+      action: "RECOVERY_COMPLETED",
+      fileId: file._id,
+      details: {
+        recoveryType: "SOFT_DELETE_RECOVERY",
+        fileName: file.name,
+      },
+    });
+
+    res.redirect("/files/recycle-bin?message=File recovered successfully.");
+  } catch (error) {
+    console.error("File recovery failed:", error);
+    res.status(500).send("Could not recover the file.");
+  }
+};
+
+exports.verifyIntegrity = async (req, res) => {
+  try {
+    const file = await File.findOne({
+      _id: req.params.id,
+      ownerId: req.session.userId,
+      status: "ACTIVE",
+    });
+
+    if (!file) {
+      return res.status(404).send("File not found or access denied.");
+    }
+
+    const version = file.currentVersionId
+      ? await FileVersion.findById(file.currentVersionId)
+      : null;
+
+    let replica = null;
+    let actualChecksum = null;
+    let integrityStatus = "NO_VERSION";
+
+    if (version) {
+      replica = await Replica.findOne({
+        versionId: version._id,
+      });
+
+      if (!replica) {
+        integrityStatus = "NO_REPLICA";
+      } else {
+        try {
+          const buffer = await fs.readFile(replica.objectPath);
+
+          actualChecksum = crypto
+            .createHash("sha256")
+            .update(buffer)
+            .digest("hex");
+
+          integrityStatus =
+            actualChecksum === version.checksum &&
+            actualChecksum === replica.checksum
+              ? "PASS"
+              : "CORRUPTED";
+
+          if (integrityStatus === "CORRUPTED") {
+            replica.state = "CORRUPTED";
+            await replica.save();
+          } else {
+            replica.state = "AVAILABLE";
+            await replica.save();
+          }
+        } catch (error) {
+          integrityStatus = "MISSING";
+          replica.state = "MISSING";
+          await replica.save();
+        }
+      }
+    }
+
+    await AuditLog.create({
+      actorId: req.session.userId,
+      action: "FILE_INTEGRITY_CHECKED",
+      fileId: file._id,
+      versionId: version ? version._id : null,
+      details: {
+        status: integrityStatus,
+        expectedChecksum: version ? version.checksum : null,
+        actualChecksum,
+        replicaId: replica ? replica._id : null,
+      },
+    });
+
+    res.render("files/integrity-result", {
+      file,
+      version,
+      replica,
+      actualChecksum,
+      integrityStatus,
+    });
+  } catch (error) {
+    console.error("Integrity verification failed:", error);
+    res.status(500).send("Could not verify file integrity.");
+  }
+};
+
+exports.findDuplicates = async (req, res) => {
+  try {
+    const files = await File.find({
+      ownerId: req.session.userId,
+      status: "ACTIVE",
+    })
+      .select("name currentVersionId")
+      .populate("currentVersionId", "checksum versionNo")
+      .sort({ name: 1 });
+
+    const groups = new Map();
+
+    for (const file of files) {
+      const version = file.currentVersionId;
+
+      if (!version || !version.checksum) continue;
+
+      const checksum = version.checksum.toLowerCase();
+
+      if (!groups.has(checksum)) {
+        groups.set(checksum, []);
+      }
+
+      groups.get(checksum).push(file);
+    }
+
+    const duplicates = [];
+
+    for (const [checksum, matchingFiles] of groups) {
+      if (matchingFiles.length > 1) {
+        duplicates.push({
+          checksum,
+          files: matchingFiles,
+        });
+      }
+    }
+
+    res.render("files/duplicates", {
+      duplicates,
+      totalGroups: duplicates.length,
+      totalFiles: duplicates.reduce(
+        (sum, group) => sum + group.files.length,
+        0
+      ),
+    });
+  } catch (error) {
+    console.error("Duplicate detection failed:", error);
+    res.status(500).send("Could not detect duplicate files.");
+  }
+};
+
+exports.storageMonitor = async (req, res) => {
+  try {
+    const nodes = await StorageNode.find().sort({ nodeName: 1 });
+
+    const monitoredNodes = nodes.map((node) => {
+      const capacity = Number(node.capacityBytes) || 0;
+      const usedSpace = Number(node.usedSpaceBytes) || 0;
+
+      const utilization = capacity > 0
+        ? Math.min(100, Math.round((usedSpace / capacity) * 100))
+        : 0;
+
+      let health = "HEALTHY";
+
+      if (capacity <= 0 || usedSpace < 0 || usedSpace > capacity) {
+        health = "CHECK_REQUIRED";
+      } else if (utilization >= 90) {
+        health = "CRITICAL";
+      } else if (utilization >= 75) {
+        health = "WARNING";
+      }
+
+      return {
+        id: node._id,
+        name: node.nodeName,
+        status: node.status,
+        capacity,
+        usedSpace,
+        availableSpace: Math.max(0, capacity - usedSpace),
+        utilization,
+        health,
+      };
+    });
+
+    res.render("files/storage-monitor", {
+      nodes: monitoredNodes,
+      totalNodes: monitoredNodes.length,
+      totalCapacity: monitoredNodes.reduce(
+        (sum, node) => sum + node.capacity, 0
+      ),
+      totalUsed: monitoredNodes.reduce(
+        (sum, node) => sum + node.usedSpace, 0
+      ),
+    });
+  } catch (error) {
+    console.error("Storage monitoring failed:", error);
+    res.status(500).send("Could not load storage monitoring.");
+  }
+};
+
+exports.updateTags = async (req, res) => {
+  try {
+    const file = await File.findOne({
+      _id: req.params.id,
+      ownerId: req.session.userId,
+      status: "ACTIVE",
+    });
+
+    if (!file) {
+      return res.status(404).send("File not found or access denied.");
+    }
+
+    const rawTags = String(req.body.tags || "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+
+    const tags = [...new Set(rawTags.map((tag) => tag.toLowerCase()))];
+
+    if (tags.length > 10 || tags.some((tag) => tag.length > 30)) {
+      return res.status(400).send("Use at most 10 tags, each up to 30 characters.");
+    }
+
+    file.tags = tags;
+    await file.save();
+
+    await AuditLog.create({
+      actorId: req.session.userId,
+      action: "TAGS_UPDATED",
+      fileId: file._id,
+      details: { tags },
+    });
+
+    res.redirect("/files/dashboard?message=File tags updated.");
+  } catch (error) {
+    console.error("Tag update failed:", error);
+    res.status(500).send("Could not update file tags.");
+  }
+};
+
+exports.exportAuditLogs = async (req, res) => {
+  try {
+    const logs = await AuditLog.find({
+      actorId: req.session.userId,
+    })
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
+
+    const escapeCsv = (value) => {
+      const text = value == null
+        ? ""
+        : typeof value === "object"
+          ? JSON.stringify(value)
+          : String(value);
+
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+
+    const rows = [
+      ["Timestamp", "Action", "File ID", "Details"],
+      ...logs.map((log) => [
+        log.createdAt ? new Date(log.createdAt).toISOString() : "",
+        log.action,
+        log.fileId || "",
+        log.details || "",
+      ]),
+    ];
+
+    const csv = rows
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\r\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="metasync-audit-logs.csv"'
+    );
+
+    res.send("\uFEFF" + csv);
+  } catch (error) {
+    console.error("Audit export failed:", error);
+    res.status(500).send("Could not export audit logs.");
   }
 };

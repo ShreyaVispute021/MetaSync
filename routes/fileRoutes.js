@@ -8,6 +8,14 @@ const router = express.Router();
 const upload = multer({ dest: "uploads/" });
 
 router.get("/dashboard", requireLogin, fileController.dashboard);
+router.get("/recycle-bin", requireLogin, fileController.recycleBin);
+router.post("/:id/delete", requireLogin, fileController.deleteFile);
+router.post("/:id/recover", requireLogin, fileController.recoverFile);
+router.get("/:id/verify", requireLogin, fileController.verifyIntegrity);
+router.get("/duplicates", requireLogin, fileController.findDuplicates);
+router.get("/storage-monitor", requireLogin, fileController.storageMonitor);
+router.post("/:id/tags", requireLogin, fileController.updateTags);
+router.get("/audit-logs/export", requireLogin, fileController.exportAuditLogs);
 
 router.post(
   "/upload",

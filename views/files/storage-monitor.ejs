@@ -1,0 +1,101 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Storage Monitor | MetaSync</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+  <nav class="navbar navbar-dark bg-black px-4">
+    <a class="navbar-brand fw-bold" href="/files/dashboard">MetaSync</a>
+  </nav>
+
+  <main class="container py-5">
+    <h1>Storage Capacity Monitor</h1>
+    <p class="text-secondary">
+      Simulated storage-node capacity based on MongoDB metadata.
+    </p>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <div class="card bg-black border-secondary">
+          <div class="card-body">
+            <p class="text-secondary mb-1">Total Capacity</p>
+            <h3><%= totalCapacity.toLocaleString() %> bytes</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card bg-black border-secondary">
+          <div class="card-body">
+            <p class="text-secondary mb-1">Total Used</p>
+            <h3><%= totalUsed.toLocaleString() %> bytes</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% if (nodes.length === 0) { %>
+      <div class="alert alert-warning">
+        No storage nodes were found in MongoDB.
+      </div>
+    <% } %>
+
+    <% nodes.forEach(node => { %>
+      <div class="card bg-black border-secondary mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between flex-wrap gap-2">
+            <h5><%= node.name %></h5>
+            <span class="badge
+              <%= node.health === 'HEALTHY' ? 'bg-success' :
+                  node.health === 'WARNING' ? 'bg-warning text-dark' :
+                  node.health === 'CRITICAL' ? 'bg-danger' : 'bg-secondary' %>">
+              <%= node.health %>
+            </span>
+          </div>
+
+          <p class="text-secondary mb-2">
+            Node status: <%= node.status %>
+          </p>
+
+          <div class="progress mb-3" style="height: 22px">
+            <div
+              class="progress-bar
+                <%= node.health === 'CRITICAL' ? 'bg-danger' :
+                    node.health === 'WARNING' ? 'bg-warning' : 'bg-info' %>"
+              role="progressbar"
+              style="width: <%= node.utilization %>%"
+              aria-valuenow="<%= node.utilization %>"
+              aria-valuemin="0"
+              aria-valuemax="100">
+              <%= node.utilization %>%
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-4">
+              <small class="text-secondary">Capacity</small>
+              <p><%= node.capacity.toLocaleString() %> bytes</p>
+            </div>
+            <div class="col-md-4">
+              <small class="text-secondary">Used</small>
+              <p><%= node.usedSpace.toLocaleString() %> bytes</p>
+            </div>
+            <div class="col-md-4">
+              <small class="text-secondary">Available</small>
+              <p><%= node.availableSpace.toLocaleString() %> bytes</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% }) %>
+
+    <a href="/files/dashboard" class="btn btn-primary">
+      Back to Dashboard
+    </a>
+  </main>
+</body>
+</html>

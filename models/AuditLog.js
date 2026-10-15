@@ -19,6 +19,7 @@ const auditLogSchema = new mongoose.Schema(
         "VERSION_CREATED",
         "VERSION_RESTORED",
         "FILE_DELETED",
+        "FILE_INTEGRITY_CHECKED",
         "CONFLICT_DETECTED",
         "RECOVERY_COMPLETED",
       ],

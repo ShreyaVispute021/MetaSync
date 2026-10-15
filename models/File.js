@@ -26,6 +26,20 @@ const fileSchema = new mongoose.Schema(
     mimeType: {
       type: String,
       default: "application/octet-stream",
+      tags: {
+        type: [String],
+        default: [],
+        validate: {
+          validator: (tags) =>
+            tags.length <= 10 &&
+            tags.every((tag) =>
+              typeof tag === "string" &&
+              tag.trim().length > 0 &&
+              tag.trim().length <= 30
+            ),
+          message: "Use up to 10 non-empty tags, each at most 30 characters.",
+        },
+      },
     },
     status: {
       type: String,

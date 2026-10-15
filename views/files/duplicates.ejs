@@ -1,0 +1,72 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Duplicate Files | MetaSync</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+  <nav class="navbar navbar-dark bg-black px-4">
+    <a class="navbar-brand fw-bold" href="/files/dashboard">MetaSync</a>
+  </nav>
+
+  <main class="container py-5">
+    <h1>Duplicate File Detection</h1>
+    <p class="text-secondary">
+      Files are grouped by their current-version SHA-256 checksum.
+    </p>
+
+    <div class="row g-3 my-3">
+      <div class="col-md-6">
+        <div class="card bg-black border-secondary">
+          <div class="card-body">
+            <p class="text-secondary mb-1">Duplicate groups</p>
+            <h2><%= totalGroups %></h2>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card bg-black border-secondary">
+          <div class="card-body">
+            <p class="text-secondary mb-1">Files in duplicate groups</p>
+            <h2><%= totalFiles %></h2>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% if (duplicates.length === 0) { %>
+      <div class="alert alert-info">
+        No duplicate files found. Upload two files with identical contents
+        to demonstrate this feature.
+      </div>
+    <% } else { %>
+      <% duplicates.forEach((group, index) => { %>
+        <div class="card bg-black border-secondary mb-3">
+          <div class="card-body">
+            <h5>Duplicate Group <%= index + 1 %></h5>
+
+            <p class="text-secondary">SHA-256 checksum</p>
+            <code class="text-info text-break"><%= group.checksum %></code>
+
+            <hr class="border-secondary">
+
+            <ul class="mb-0">
+              <% group.files.forEach(file => { %>
+                <li><%= file.name %></li>
+              <% }) %>
+            </ul>
+          </div>
+        </div>
+      <% }) %>
+    <% } %>
+
+    <a href="/files/dashboard" class="btn btn-primary mt-3">
+      Back to Dashboard
+    </a>
+  </main>
+</body>
+</html>

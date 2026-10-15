@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recycle Bin | MetaSync</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+  <nav class="navbar navbar-dark bg-black px-4">
+    <a class="navbar-brand fw-bold" href="/files/dashboard">MetaSync</a>
+    <span>Hello, <%= userName %></span>
+  </nav>
+
+  <main class="container py-5">
+    <h1 class="fw-bold">Recycle Bin</h1>
+    <p class="text-secondary">
+      Deleted files remain in simulated storage until permanent deletion
+      is implemented.
+    </p>
+
+    <% if (message) { %>
+      <div class="alert alert-success"><%= message %></div>
+    <% } %>
+
+    <% if (error) { %>
+      <div class="alert alert-danger"><%= error %></div>
+    <% } %>
+
+    <div class="card bg-black border-secondary">
+      <div class="card-body">
+        <% if (files.length === 0) { %>
+          <p class="text-secondary mb-0">The recycle bin is empty.</p>
+        <% } else { %>
+          <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle">
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Last Updated</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% files.forEach(file => { %>
+                  <tr>
+                    <td><%= file.name %></td>
+                    <td>
+                      <%= new Date(file.updatedAt).toLocaleString() %>
+                    </td>
+                    <td>
+                      <form
+                        action="/files/<%= file._id %>/recover"
+                        method="POST"
+                        onsubmit="return confirm('Recover this file?');"
+                      >
+                        <button class="btn btn-sm btn-success" type="submit">
+                          Recover
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+
+        <a href="/files/dashboard" class="btn btn-outline-light mt-3">
+          Back to Dashboard
+        </a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

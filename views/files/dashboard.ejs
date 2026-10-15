@@ -10,7 +10,18 @@
 <body class="bg-dark text-light">
   <nav class="navbar navbar-dark bg-black border-bottom border-secondary px-4">
     <a class="navbar-brand fw-bold" href="/files/dashboard">MetaSync</a>
-
+    <a class="btn btn-outline-light btn-sm" href="/files/recycle-bin">
+      Recycle Bin
+    </a>    
+    <a class="btn btn-outline-info btn-sm" href="/files/duplicates">
+      Find Duplicates
+    </a>
+    <a class="btn btn-outline-info btn-sm" href="/files/storage-monitor">
+      Storage Monitor
+    </a>    
+    <a class="btn btn-outline-warning btn-sm" href="/files/audit-logs/export">
+      Export Audit CSV
+    </a>
     <div class="d-flex align-items-center gap-3">
       <span>Hello, <%= userName %></span>
       <form action="/auth/logout" method="POST">
@@ -23,8 +34,7 @@
     <div class="mb-4">
       <h1 class="fw-bold">Distributed File Dashboard</h1>
       <p class="text-secondary">
-        Actual files are stored on simulated nodes; MongoDB controls metadata,
-        versions, replicas, operation state, and audit history.
+        Actual files are stored on simulated nodes; MongoDB controls metadata, versions, replicas, operation state, and audit history.
       </p>
     </div>
 
@@ -80,10 +90,60 @@
 
     <div class="card bg-black border-secondary text-light">
       <div class="card-body p-4">
+          <form action="/files/dashboard" method="GET" class="row g-2 mb-4">
+            <div class="col-md-5">
+              <input
+                class="form-control"
+                type="search"
+                name="q"
+                placeholder="Search filename..."
+                value="<%= q %>"
+              >
+            </div>
+
+            <div class="col-md-2">
+              <input
+                class="form-control"
+                type="text"
+                name="ext"
+                placeholder="Extension (pdf)"
+                value="<%= ext %>"
+              >
+            </div>
+
+            <div class="col-md-3">
+              <select class="form-select" name="sort">
+                <option value="newest" <%= sort === "newest" ? "selected" : "" %>>
+                  Recently updated
+                </option>
+                <option value="oldest" <%= sort === "oldest" ? "selected" : "" %>>
+                  Oldest updated
+                </option>
+                <option value="nameAsc" <%= sort === "nameAsc" ? "selected" : "" %>>
+                  Name A–Z
+                </option>
+                <option value="nameDesc" <%= sort === "nameDesc" ? "selected" : "" %>>
+                  Name Z–A
+                </option>
+              </select>
+            </div>
+
+            <div class="col-md-2 d-flex gap-2">
+              <button class="btn btn-primary" type="submit">Apply</button>
+              <a class="btn btn-outline-light" href="/files/dashboard">Reset</a>
+            </div>
+          </form>
+
+          <p class="text-secondary">
+            Matching files: <%= totalFiles %>
+          </p>
+
         <h4 class="mb-3">My Active Files</h4>
 
         <% if (files.length === 0) { %>
-          <p class="text-secondary mb-0">No files uploaded yet.</p>
+          <p class="text-secondary mb-0">
+            No matching files found. Try changing your search or filters.
+          </p>
         <% } else { %>
           <div class="table-responsive">
             <table class="table table-dark table-hover align-middle mb-0">
@@ -111,14 +171,70 @@
                         </a>
                         <a class="btn btn-sm btn-primary" href="/files/<%= file._id %>/versions">
                             Versions
+                        </a>         
+                        <form action="/files/<%= file._id %>/delete" method="POST" onsubmit="return confirm('Move this file to the recycle bin?');">
+                          <button class="btn btn-sm btn-danger" type="submit">
+                            Delete
+                          </button>
+                        </form>                        
+                        <a class="btn btn-sm btn-info"
+                          href="/files/<%= file._id %>/verify">
+                          Verify
                         </a>
                     </td>
+                    <form action="/files/<%= file._id %>/tags" method="POST">
+                      <input
+                        class="form-control form-control-sm mb-2"
+                        type="text"
+                        name="tags"
+                        value="<%= (file.tags || []).join(', ') %>"
+                        placeholder="Documents, Projects"
+                        maxlength="310"
+                      >
+                      <button class="btn btn-sm btn-outline-info" type="submit">
+                        Save Tags
+                      </button>
+                    </form>
+                    <p class="small text-secondary">
+                      Tags: <%= (file.tags || []).join(", ") || "None" %>
+                    </p>
                   </tr>
                 <% }) %>
               </tbody>
             </table>
           </div>
         <% } %>
+        
+        <% if (totalPages > 1) { %>
+          <nav class="mt-4" aria-label="File pages">
+            <ul class="pagination pagination-sm mb-0">
+              <% if (page > 1) { %>
+                <li class="page-item">
+                  <a class="page-link"
+                     href="/files/dashboard?q=<%= encodeURIComponent(q) %>&ext=<%= encodeURIComponent(ext) %>&sort=<%= sort %>&page=<%= page - 1 %>">
+                    Previous
+                  </a>
+                </li>
+              <% } %>
+
+              <li class="page-item disabled">
+                <span class="page-link">
+                  Page <%= page %> of <%= totalPages %>
+                </span>
+              </li>
+
+              <% if (page < totalPages) { %>
+                <li class="page-item">
+                  <a class="page-link"
+                     href="/files/dashboard?q=<%= encodeURIComponent(q) %>&ext=<%= encodeURIComponent(ext) %>&sort=<%= sort %>&page=<%= page + 1 %>">
+                    Next
+                  </a>
+                </li>
+              <% } %>
+            </ul>
+          </nav>
+        <% } %>
+
       </div>
     </div>
   </main>
