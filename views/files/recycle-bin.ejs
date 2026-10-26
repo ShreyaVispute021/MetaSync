@@ -51,15 +51,27 @@
                       <%= new Date(file.updatedAt).toLocaleString() %>
                     </td>
                     <td>
-                      <form
-                        action="/files/<%= file._id %>/recover"
-                        method="POST"
-                        onsubmit="return confirm('Recover this file?');"
-                      >
-                        <button class="btn btn-sm btn-success" type="submit">
-                          Recover
-                        </button>
-                      </form>
+                      <div class="d-flex gap-2 flex-wrap">
+                        <form
+                          action="/files/<%= file._id %>/recover"
+                          method="POST"
+                          onsubmit="return confirm('Recover this file?');"
+                        >
+                          <button class="btn btn-sm btn-success" type="submit">
+                            Recover
+                          </button>
+                        </form>
+
+                        <form
+                          action="/files/<%= file._id %>/permanent-delete"
+                          method="POST"
+                          onsubmit="return confirm('Permanently delete this file and its stored versions? This cannot be undone.');"
+                        >
+                          <button class="btn btn-sm btn-danger" type="submit">
+                            Delete Permanently
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 <% }) %>

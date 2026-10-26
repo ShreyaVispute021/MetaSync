@@ -712,6 +712,168 @@ exports.recoverFile = async (req, res) => {
   }
 };
 
+
+exports.permanentlyDeleteFile = async (req, res) => {
+  try {
+    // Only the owner can permanently delete their own recycled file.
+    const file = await File.findOne({
+      _id: req.params.id,
+      ownerId: req.session.userId,
+      status: "DELETED",
+    });
+
+    if (!file) {
+      return res.status(404).send(
+        "Deleted file not found or access denied."
+      );
+    }
+
+    const versions = await FileVersion.find({
+      fileId: file._id,
+    }).lean();
+
+    const versionIds = versions.map((version) => version._id);
+
+    const replicas = versionIds.length
+      ? await Replica.find({
+          versionId: { $in: versionIds },
+        }).lean()
+      : [];
+
+    // Group identical physical paths so a restored version cannot
+    // cause the same file to be removed or counted more than once.
+    const paths = new Map();
+
+    for (const replica of replicas) {
+      const fullPath = path.resolve(replica.objectPath);
+      const relativePath = path.relative(storageBase, fullPath);
+
+      if (
+        !relativePath ||
+        relativePath === ".." ||
+        relativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativePath)
+      ) {
+        return res.status(400).send(
+          "Deletion stopped: a replica path is outside the storage folders."
+        );
+      }
+
+      if (!paths.has(fullPath)) {
+        paths.set(fullPath, {
+          nodeId: replica.nodeId,
+          size: 0,
+          shouldUnlink: false,
+        });
+      }
+    }
+
+    // Validate references and inspect files before deleting anything.
+    for (const [fullPath, item] of paths) {
+      const otherReference = await Replica.findOne({
+        objectPath: fullPath,
+        versionId: { $nin: versionIds },
+      }).lean();
+
+      if (otherReference) {
+        continue;
+      }
+
+      item.shouldUnlink = true;
+
+      try {
+        const stat = await fs.stat(fullPath);
+
+        if (!stat.isFile()) {
+          return res.status(400).send(
+            "Deletion stopped: a replica path is not a regular file."
+          );
+        }
+
+        item.size = stat.size;
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          throw error;
+        }
+      }
+    }
+
+    // Remove eligible physical payloads.
+    for (const [fullPath, item] of paths) {
+      if (!item.shouldUnlink) continue;
+
+      await fs.unlink(fullPath).catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+
+    // Remove metadata associated with this file.
+    await Permission.deleteMany({ fileId: file._id });
+
+    if (versionIds.length) {
+      await Replica.deleteMany({
+        versionId: { $in: versionIds },
+      });
+
+      await FileVersion.deleteMany({
+        fileId: file._id,
+      });
+    }
+
+    await File.deleteOne({ _id: file._id });
+
+    // Reduce usage only for physical files that were eligible
+    // for removal. Clamp the result to avoid negative usage.
+    for (const item of paths.values()) {
+      if (!item.shouldUnlink || item.size <= 0) continue;
+
+      await StorageNode.updateOne(
+        { _id: item.nodeId },
+        [
+          {
+            $set: {
+              usedSpaceBytes: {
+                $max: [
+                  0,
+                  {
+                    $subtract: [
+                      "$usedSpaceBytes",
+                      item.size,
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ]
+      );
+    }
+
+    // Keep audit history even after the file document is removed.
+    await AuditLog.create({
+      actorId: req.session.userId,
+      action: "PERMANENT_DELETE",
+      fileId: file._id,
+      details: {
+        fileName: file.name,
+        versionsRemoved: versions.length,
+        replicasRemoved: replicas.length,
+      },
+    });
+
+    return res.redirect(
+      "/files/recycle-bin?message=File permanently deleted."
+    );
+  } catch (error) {
+    console.error("Permanent deletion failed:", error);
+
+    return res.status(500).send(
+      "Permanent deletion failed. Check the server logs and storage metadata."
+    );
+  }
+};
+
+
 exports.verifyIntegrity = async (req, res) => {
   try {
     const file = await File.findOne({

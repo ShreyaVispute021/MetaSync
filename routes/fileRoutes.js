@@ -11,6 +11,11 @@ router.get("/dashboard", requireLogin, fileController.dashboard);
 router.get("/recycle-bin", requireLogin, fileController.recycleBin);
 router.post("/:id/delete", requireLogin, fileController.deleteFile);
 router.post("/:id/recover", requireLogin, fileController.recoverFile);
+router.post(
+  "/:id/permanent-delete",
+  requireLogin,
+  fileController.permanentlyDeleteFile
+);
 router.get("/:id/verify", requireLogin, fileController.verifyIntegrity);
 router.get("/duplicates", requireLogin, fileController.findDuplicates);
 router.get("/storage-monitor", requireLogin, fileController.storageMonitor);

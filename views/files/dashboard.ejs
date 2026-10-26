@@ -155,6 +155,7 @@
                   <th>Checksum</th>
                   <th>Revision</th>
                   <th>Action</th>
+                  <th>Tags</th>
                 </tr>
               </thead>
               <tbody>
@@ -181,23 +182,31 @@
                           href="/files/<%= file._id %>/verify">
                           Verify
                         </a>
-                    </td>
-                    <form action="/files/<%= file._id %>/tags" method="POST">
-                      <input
-                        class="form-control form-control-sm mb-2"
-                        type="text"
-                        name="tags"
-                        value="<%= (file.tags || []).join(', ') %>"
-                        placeholder="Documents, Projects"
-                        maxlength="310"
+                    </td>                    
+                    <td style="min-width: 190px;">
+                      <form
+                        action="/files/<%= file._id %>/tags"
+                        method="POST"
+                        class="d-flex flex-column gap-2"
                       >
-                      <button class="btn btn-sm btn-outline-info" type="submit">
-                        Save Tags
-                      </button>
-                    </form>
-                    <p class="small text-secondary">
-                      Tags: <%= (file.tags || []).join(", ") || "None" %>
-                    </p>
+                        <input
+                          class="form-control form-control-sm"
+                          type="text"
+                          name="tags"
+                          value="<%= (file.tags || []).join(', ') %>"
+                          placeholder="Documents, Projects"
+                          maxlength="310"
+                        >
+
+                        <button class="btn btn-sm btn-outline-info align-self-start" type="submit">
+                          Save Tags
+                        </button>
+                      </form>
+
+                      <small class="text-secondary d-block mt-1">
+                        Tags: <%= (file.tags || []).join(", ") || "None" %>
+                      </small>
+                    </td>
                   </tr>
                 <% }) %>
               </tbody>

@@ -22,6 +22,7 @@ const auditLogSchema = new mongoose.Schema(
         "FILE_INTEGRITY_CHECKED",
         "CONFLICT_DETECTED",
         "RECOVERY_COMPLETED",
+        "PERMANENT_DELETE",
       ],
     },
     fileId: {
